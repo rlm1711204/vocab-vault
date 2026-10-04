@@ -81,6 +81,11 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   other formats around it. Complete pasted questions need no AI call.
 - Photo/PDF → chat app: `buildMaterialPrompt` (gk-prompt.js) + the 💬 tile and panel in gk-ui.js (`navigator.share` with the
   files and prompt where `canShare({files})`, else copy the prompt). The answer goes through the same `readPasted`.
+- Two methods (Maths/Reasoning): `solution` = Method 1 (the material's own working is listed as `working` in
+  Q_LIST_SCHEMA and passed on as "Given method"), `shortcut` + `fastSecs` = Method 2 (shortest). Copied prompts use `M2:`
+  lines (read before `S:`, which would otherwise take "Method 2:"). `methodsFor` / `buildMethodsPrompt` fill saved
+  questions; a pasted methods answer is read without AI (`gui.copied === "methods"`) and fills via `addItems` (FILLABLE).
+- Sorted list (Maths, Reasoning, GK Topics → 📋 List): src/lib/sortlist.js (`sortItems`, `sections` by day added).
 - AI limits & usage (Settings card, src/usage-ui.js + src/lib/usage.js): gemini.js / compat.js / ai.js / freedict.js
   call `countRequest` (not for a 429), `noteHeaders` (any `x-ratelimit-*` / `anthropic-ratelimit-*` the browser may read)
   and `noteLimitHit` (Gemini's 429 `QuotaFailure` → limit and size; `RetryInfo` → retry time). Stored in localStorage

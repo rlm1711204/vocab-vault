@@ -432,6 +432,9 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .rule-block.ok > b { color: var(--ok); }
 .rule-block.bad { background: var(--bad-soft); }
 .rule-block.bad > b { color: var(--bad); }
+.rule-block.fast { background: var(--saffron-soft); }
+.rule-block.fast > b { color: var(--saffron); }
+.fast-line b { color: var(--saffron); }
 .mistake { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }
 .mistake .wrong { text-decoration: line-through; text-decoration-color: var(--bad); color: var(--ink-2); }
 .mistake .wrong::before { content: "✗"; color: var(--bad); text-decoration: none; display: inline-block; margin-right: .35em; }
@@ -607,3 +610,5 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .usage-list > li { padding: 10px 0; border-top: 1px solid var(--line); display: grid; gap: 3px; }
 .usage-title { font-weight: 700; }
 .usage-list .row { margin: 4px 0 0; }
+.layout-chips { margin: 6px 0 2px; }
+.day-head { margin: 16px 2px 4px; font: 700 .9rem var(--sans); color: var(--ink-2); }

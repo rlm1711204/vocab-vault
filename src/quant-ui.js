@@ -2,17 +2,18 @@
 // formula sheet + question types). main.js owns the shell and passes `ctx`; this mirrors gk-ui.js.
 import { SOURCES } from "./lib/quant-store.js";
 import { QUANT_KINDS, kindAccepts, makeQuantQuestion } from "./lib/quant-quiz.js";
-import { figureFor, isQTopicLike, practiceFor, quantFromFiles, quantFromText, quantFromTopic, readNotes, readPastedQ } from "./lib/quant-ai.js";
+import { figureFor, isQTopicLike, methodsFor, practiceFor, quantFromFiles, quantFromText, quantFromTopic, readNotes, readPastedQ } from "./lib/quant-ai.js";
 import { buildQuantMaterialPrompt, buildQuantTopicPrompt, buildSimilarPrompt, looksQuantStructured } from "./lib/quant-prompt.js";
 import { isBookId, loadQBook } from "./lib/qbook.js";
 import { ALL_QTOPICS, QTAXONOMY, SEP, qPatternKey, qTopicKey } from "./lib/quant-taxonomy.js";
 import { makeQItem, qItemsToCSV } from "./lib/quant.js";
 import { cleanImage, sanitizeSvg } from "./lib/svgsafe.js";
-import { buildFigurePrompt } from "./lib/quant-prompt.js";
+import { buildFigurePrompt, buildMethodsPrompt } from "./lib/quant-prompt.js";
 import { figureSvg } from "./lib/geodraw.js";
 import { cropFigure, normBox, padBox } from "./lib/figcrop.js";
 import { pagePicture } from "./lib/extract.js";
 import { labelOf, nodeState, toggle } from "./lib/gk-topics.js";
+import { SORTS, sections, sortItems } from "./lib/sortlist.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
 import { todayISO } from "./lib/words.js";
@@ -52,6 +53,8 @@ export function createQuantUI(ctx, part) {
     search: "",
     browse: "",
     tab: "all",
+    layout: "topics", // Topics screen: "topics" (by topic and type) or "list" (one sorted list)
+    sort: "newest",
     pickerOpen: new Set(),
     qotdShown: false,
   };
@@ -108,12 +111,20 @@ export function createQuantUI(ctx, part) {
               it.aiMade ? ` <span class="badge" title="Practice question written by AI">AI-made</span>` : ""
             }</p>
             ${it.options.length ? `<p class="muted small">Not: ${esc(it.options.join(" · "))}</p>` : ""}
-            ${it.solution ? `<div class="rule-block ok"><b>Solution</b>${lines(it.solution)}</div>` : ""}
+            ${methodsBlock(it)}
             ${it.formula ? `<div class="formula-box"><b>📐 Formula</b>${lines(it.formula)}</div>` : ""}
             ${it.trick ? `<div class="tip"><strong>💡 Trick</strong>${lines(it.trick)}</div>` : ""}`
           : ""
       }`;
   }
+  /** My saved questions that don't have ⚡ Method 2 yet (oldest first). */
+  const missingMethods = () => qs.liveItems().filter((i) => i.kind === "question" && i.a && !i.shortcut);
+  const setBusyToast = (t) => toast(t, 120000);
+
+  /** Method 1 (the standard way, or the material's own working) and ⚡ Method 2 (the shortest way). */
+  const methodsBlock = (it) =>
+    `${it.solution ? `<div class="rule-block ok"><b>${it.shortcut ? "Method 1 · Standard" : "Solution"}</b>${lines(it.solution)}</div>` : ""}
+     ${it.shortcut ? `<div class="rule-block fast"><b>⚡ Method 2 · Shortest${it.fastSecs ? ` <span class="badge learning">≈ ${it.fastSecs} s</span>` : ""}</b>${lines(it.shortcut)}</div>` : ""}`;
   const formulaBlock = (it) =>
     `${it.formula ? `<div class="formula-box">${lines(it.formula)}</div>` : ""}
      ${it.trick ? `<div class="tip"><strong>💡 Trick</strong>${lines(it.trick)}</div>` : ""}
@@ -521,7 +532,9 @@ export function createQuantUI(ctx, part) {
     let ai = null;
     try {
       let items = null;
-      if (hasAI(s)) {
+      // The answer to "Prompt for the shortest method" only adds methods to saved questions: no AI needed.
+      if (gui.copied === "methods" && looksQuantStructured(text)) items = readPastedQ(text);
+      if (!items && hasAI(s)) {
         try {
           const res = await quantFromText(s, text, promptOpts(), setBusy);
           ai = res;
@@ -751,7 +764,8 @@ export function createQuantUI(ctx, part) {
             ? `<div class="explain g-explain ${answered ? (q.lastCorrect ? "ok" : "bad") : ""}">
                  <div class="explain-text">
                    ${it.kind === "question" && answered && !cur.selfGraded ? `<p class="small"><b>${q.lastCorrect ? "✓ Right" : `✗ The answer is ${esc(it.a)}`}</b></p>` : ""}
-                   ${it.kind === "question" && it.solution ? `<p class="small"><b>Solution</b><br />${lines(it.solution)}</p>` : ""}
+                   ${it.kind === "question" && it.solution ? `<p class="small"><b>${it.shortcut ? "Method 1 · Standard" : "Solution"}</b><br />${lines(it.solution)}</p>` : ""}
+                   ${it.kind === "question" && it.shortcut ? `<p class="small fast-line"><b>⚡ Method 2 · Shortest${it.fastSecs ? ` (≈ ${it.fastSecs} s)` : ""}</b><br />${lines(it.shortcut)}</p>` : ""}
                    ${it.formula && it.kind === "question" ? `<p class="small">📐 ${lines(it.formula)}</p>` : ""}
                    ${it.trick ? `<p class="small">💡 <b>Trick:</b> ${lines(it.trick)}</p>` : ""}
                    ${it.kind === "formula" && it.solution ? `<p class="small"><b>Example:</b> ${lines(it.solution)}</p>` : ""}
@@ -774,20 +788,35 @@ export function createQuantUI(ctx, part) {
     </span>`;
   }
 
-  const listOf = (items) =>
+  const listOf = (items, { topic = false } = {}) =>
     items.length
       ? `<ul class="word-list rule-list">${items
           .slice(0, LIST_SHOWN)
           .map(
-            (it) => `<li data-action="${P}-open" data-id="${esc(it.id)}" class="${it.variantOf ? "variant" : ""}">
+            (it) => `<li data-action="${P}-open" data-id="${esc(it.id)}" class="${it.variantOf && !topic ? "variant" : ""}">
               <div><b>${it.kind === "formula" ? "📐 " : it.variantOf ? "🔁 " : ""}${esc(it.q.length > 120 ? `${it.q.slice(0, 118)}…` : it.q)}</b><span class="muted small block">${
-                it.kind === "formula" ? esc((it.formula || "").split("\n")[0].slice(0, 90)) : `✓ ${esc(it.a)}`
-              }</span></div>
+                it.kind === "formula" ? esc((it.formula || "").split("\n")[0].slice(0, 90)) : `✓ ${esc(it.a)}${it.shortcut ? " · ⚡" : ""}`
+              }${topic ? ` · ${esc(it.topic)}${it.pattern ? ` › ${esc(it.pattern)}` : ""}` : ""}</span></div>
               <span class="badge ${stage(it)}">${STAGE_LABEL[stage(it)]}</span>
             </li>`,
           )
           .join("")}</ul>${items.length > LIST_SHOWN ? `<p class="muted small center">Showing ${LIST_SHOWN} of ${items.length}. Search to narrow down.</p>` : ""}`
       : `<p class="muted center">Nothing here yet.</p>`;
+
+  /** Questions saved before Method 2 existed (or pasted without it): add their shortest methods in one go. */
+  function methodsCard() {
+    const n = missingMethods().length;
+    if (!n) return "";
+    const ai = hasAI(settings());
+    return `<article class="card">
+      <h3>⚡ Shortest methods</h3>
+      <p class="muted small">${plural(n, "question")} ${n === 1 ? "has" : "have"} only one method. Add the shortest method (Method 2) — your answers and methods stay as they are.</p>
+      <div class="row wrap">
+        ${ai ? `<button class="btn small primary" type="button" data-action="${P}-find-methods" data-all="1">⚡ Find with AI (${n})</button>` : ""}
+        <button class="btn small" type="button" data-action="${P}-copy-methods" data-all="1">📋 Prompt for Gemini${n > 15 ? " (15 at a time)" : ""}</button>
+      </div>
+    </article>`;
+  }
 
   function formulaSheet(items) {
     const f = items.filter((i) => i.kind === "formula");
@@ -819,6 +848,26 @@ export function createQuantUI(ctx, part) {
         .join("")}
     </div>`;
     const search = `<input type="search" id="${P}Search" placeholder="Search questions, formulas and tricks" value="${esc(gui.search)}" autocomplete="off" />`;
+    const layout = `<div class="chips layout-chips">
+      <button type="button" class="chip ${gui.layout === "topics" ? "on" : ""}" data-action="${P}-layout" data-layout="topics">🗂️ By topic</button>
+      <button type="button" class="chip ${gui.layout === "list" ? "on" : ""}" data-action="${P}-layout" data-layout="list">📋 List · newest first & more</button>
+    </div>`;
+    if (gui.layout === "list" && !term) {
+      // One list of everything in this tab, in the chosen order (by day added for newest / oldest).
+      const sorted = sortItems(all, gui.sort);
+      const parts = sections(sorted.slice(0, 300), gui.sort);
+      return `${tabs}
+        <div class="row between"><h1>Topics</h1><button class="btn small" type="button" data-action="${P}-new">＋ New</button></div>
+        ${search}${layout}
+        <label class="field">Order
+          <select data-input="${P}-sort">${SORTS.map(([k, l]) => `<option value="${k}" ${gui.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        ${
+          sorted.length
+            ? parts.map((sec) => `${sec.label ? `<h3 class="day-head">${esc(sec.label)} <span class="muted small">${sec.items.length}</span></h3>` : ""}${listOf(sec.items, { topic: true })}`).join("")
+            : `<p class="muted center">Nothing here yet.</p>`
+        }
+        ${sorted.length > 300 ? `<p class="muted small center">Showing 300 of ${sorted.length}. Search to narrow down.</p>` : ""}`;
+    }
     if (term) {
       const hits = all.filter((i) => `${i.q} ${i.a} ${i.formula} ${i.trick} ${i.topic} ${i.pattern}`.toLowerCase().includes(term));
       return `${tabs}<h1>Topics</h1>${search}<p class="muted small">${hits.length} match${hits.length === 1 ? "" : "es"}</p>${listOf(hits)}`;
@@ -839,7 +888,7 @@ export function createQuantUI(ctx, part) {
           .join("")}</p>`;
     const head = `${tabs}
       <div class="row between"><h1>${isRoot ? "Topics" : esc(labelOf(node))}</h1><button class="btn small" type="button" data-action="${P}-new">＋ New</button></div>
-      ${search}${crumbs}`;
+      ${search}${isRoot ? layout : ""}${crumbs}`;
     if (depth < 2) {
       const kids = tree.get(node) || [];
       return `${head}
@@ -856,6 +905,7 @@ export function createQuantUI(ctx, part) {
             : `<p class="muted center">Nothing here yet.</p>`
         }
         ${kids.length ? `<button class="btn small block" type="button" data-action="${P}-practise-keys" data-keys="${esc(node)}">🎯 Practise all ${esc(part.title)}</button>` : ""}
+        ${methodsCard()}
         ${qs.liveItems().length ? `<div class="row wrap center"><button class="btn small" type="button" data-action="${P}-export-csv">⬇ My notes as CSV (Excel)</button></div>` : ""}`;
     }
     if (depth === 2) {
@@ -929,6 +979,12 @@ export function createQuantUI(ctx, part) {
                  it.kind === "question" && !it.variantOf
                    ? `${ai ? `<button class="btn small" type="button" data-action="${P}-more-practice" data-id="${esc(it.id)}">🤖 ＋2 practice questions</button>` : ""}
                       <button class="btn small" type="button" data-action="${P}-copy-similar" data-id="${esc(it.id)}">📋 Prompt for 2 more</button>`
+                   : ""
+               }
+               ${
+                 it.kind === "question" && !it.shortcut
+                   ? `${ai ? `<button class="btn small" type="button" data-action="${P}-find-methods" data-id="${esc(it.id)}">⚡ Find the shortest method</button>` : ""}
+                      <button class="btn small" type="button" data-action="${P}-copy-methods" data-id="${esc(it.id)}">📋 Prompt for the shortest method</button>`
                    : ""
                }
                ${it.pattern && it.kind === "question" ? `<button class="btn small" type="button" data-action="${P}-practise-type" data-key="${esc(qPatternKey(it))}">🧩 All of this type</button>` : ""}
@@ -1012,7 +1068,9 @@ export function createQuantUI(ctx, part) {
         <label class="field">Question (or the formula's name)<textarea name="q" rows="3" required>${v("q")}</textarea></label>
         <label class="field">Answer (questions)<input name="a" value="${v("a")}" /></label>
         <label class="field">Wrong options (one per line)<textarea name="options" rows="3">${esc((it?.options ?? []).join("\n"))}</textarea></label>
-        <label class="field">Solution steps / worked example<textarea name="solution" rows="4">${v("solution")}</textarea></label>
+        <label class="field">Method 1 · solution steps (or a formula's worked example)<textarea name="solution" rows="4">${v("solution")}</textarea></label>
+        <label class="field">⚡ Method 2 · shortest method (questions)<textarea name="shortcut" rows="3">${v("shortcut")}</textarea></label>
+        <label class="field">Method 2 takes about (seconds)<input name="fastSecs" type="number" min="0" max="900" value="${it?.fastSecs || ""}" /></label>
         <label class="field">Formula<textarea name="formula" rows="2">${v("formula")}</textarea></label>
         <label class="field">Trick / shortcut<textarea name="trick" rows="2">${v("trick")}</textarea></label>
         <label class="field">Topic<select name="topic">${topicOptions(it || { subject: part.subject, topic: part.defaultTopic })}</select></label>
@@ -1033,6 +1091,8 @@ export function createQuantUI(ctx, part) {
       a: f.get("a"),
       options: String(f.get("options") || "").split("\n").map((x) => x.trim()).filter(Boolean),
       solution: f.get("solution"),
+      shortcut: f.get("shortcut"),
+      fastSecs: Number(f.get("fastSecs")) || 0,
       formula: f.get("formula"),
       trick: f.get("trick"),
       subject,
@@ -1167,6 +1227,34 @@ export function createQuantUI(ctx, part) {
       } catch (e) {
         toast(e.message, 7000);
       }
+    },
+    [`${P}-find-methods`]: async (el) => {
+      // One question (from its card) or every question still missing Method 2 (data-all).
+      const list = el.dataset.all ? missingMethods() : [qs.byId(el.dataset.id)].filter(Boolean);
+      if (!list.length) return toast("Every question already has its shortest method ✓");
+      setBusyToast(`AI is finding the shortest method${list.length > 1 ? `s for ${list.length} questions` : ""}…`);
+      try {
+        const res = await methodsFor(settings(), list, (t) => setBusyToast(t));
+        for (const d of res.done) qs.updateItem(d.id, (i) => ({ ...i, solution: i.solution || d.solution, shortcut: d.shortcut, fastSecs: d.fastSecs }));
+        const left = list.length - res.done.length;
+        toast(
+          res.done.length
+            ? `⚡ Shortest method added to ${plural(res.done.length, "question")} (by ${res.provider})${left ? ` — ${left} not done yet (AI limit); try again later or use the prompt.` : " ✓"}`
+            : "The AI couldn't do it right now. Try “Prompt for the shortest method” instead.",
+          8000,
+        );
+        if (!el.dataset.all && list[0]) showItem(list[0].id);
+        else render();
+        after();
+      } catch (e) {
+        toast(e instanceof AllProvidersFailed ? `The AI couldn't do it right now: ${e.message}. Try the prompt instead.` : e.message, 8000);
+      }
+    },
+    [`${P}-copy-methods`]: async (el) => {
+      const list = el.dataset.all ? missingMethods().slice(0, 15) : [qs.byId(el.dataset.id)].filter(Boolean);
+      if (!list.length) return;
+      closeOverlay();
+      await copyAndGuide(buildMethodsPrompt(list), "methods", `Prompt copied ✓ (${plural(list.length, "question")}) — paste it in Gemini, then paste its answer here`);
     },
     [`${P}-draw-figure`]: async (el) => {
       const it = qs.byId(el.dataset.id);
@@ -1365,6 +1453,11 @@ export function createQuantUI(ctx, part) {
       qs.update((s) => (s.prefs.excluded = [...(tree.get(part.subject) || [])]), { touchesData: false });
       render();
     },
+    [`${P}-layout`]: (el) => {
+      gui.layout = el.dataset.layout === "list" ? "list" : "topics";
+      gui.browse = "";
+      render();
+    },
     [`${P}-tab`]: (el) => {
       gui.tab = el.dataset.tab;
       gui.browse = "";
@@ -1387,6 +1480,11 @@ export function createQuantUI(ctx, part) {
 
   async function onChange(e) {
     const t = e.target;
+    if (t.dataset.input === `${P}-sort`) {
+      gui.sort = t.value;
+      render();
+      return true;
+    }
     if (t.dataset.input === `${P}-files`) {
       const files = [...t.files];
       t.value = "";

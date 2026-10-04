@@ -25,16 +25,19 @@ A: 6 days
 O: 5 days; 8 days; 12.5 days
 S: A does 1/10 and B does 1/15 of the work per day.
 S: Together they do 1/10 + 1/15 = 1/6 of the work per day, so they need 6 days.
+M2: (≈10 s) Product ÷ sum: (10 × 15)/(10 + 15) = 150/25 = 6 days.
 F: Together time = (a × b)/(a + b)
 T: Product ÷ sum: (10 × 15)/(10 + 15) = 6.
 PQ: A can finish a work in 12 days and B in 24 days. In how many days will they finish it together?
 A: 8 days
 O: 6 days; 9 days; 18 days
 S: (12 × 24)/(12 + 24) = 288/36 = 8 days.
+M2: (≈8 s) 24 is twice 12, so together = 24/3 = 8 days.
 PQ: A and B together finish a work in 6 days; A alone takes 10 days. How long does B alone take?
 A: 15 days
 O: 12 days; 16 days; 4 days
 S: B's rate = 1/6 − 1/10 = 1/15, so 15 days.
+M2: (≈10 s) Work = LCM 30 units: A+B do 5/day, A does 3/day, so B does 2/day → 30/2 = 15 days.
 
 FORMULA: Two workers together
 F: Together time = (a × b)/(a + b)
@@ -58,6 +61,7 @@ A: 12 cm
 O: 8 cm; 18 cm; 13 cm
 S: The radius OT is perpendicular to the tangent at T, so triangle OTP is right-angled at T.
 S: PT = √(13² − 5²) = √144 = 12 cm.
+M2: (≈5 s) 5-12-13 is a Pythagorean triplet, so PT = 12 cm.
 F: Tangent length = √(d² − r²) (Tangent–radius theorem)
 T: Right angle at the point of contact → Pythagoras (5, 12, 13).
 ${DRAW_EXAMPLE}`;
@@ -77,10 +81,11 @@ function rulesAndFormat({ variants = true, patterns, fromFiles = false } = {}) {
 - Solve every question yourself, step by step, and double-check the answer. If the material's answer is wrong, give the correct one.
 - Write maths in plain text, never LaTeX: ×, ÷, √, ², ³, π, and fractions as a/b.
 - Every question has ONE correct answer, exactly 3 believable wrong options (answers from common mistakes), a short step-by-step solution (one or more S: lines), the formula or rule used (F:) and a short trick or shortcut (T:).
+- Every question has TWO methods. S: lines = Method 1, the standard method (if my material shows its own working, keep that). M2: lines = Method 2, the SHORTEST way an exam topper would use (ratios or the unitary method, assumed values such as 100 or the LCM, options elimination, unit-digit / digit-sum checks, approximation, standard results and triplets), with about how many seconds it takes in brackets at the start of the first M2: line. If nothing is faster, write "M2: Method 1 is already the quickest; check: …".
 - Give every question a TYPE: a short name for the kind of question (e.g. "Two workers together", "Successive discounts", "Circular seating facing centre", "Either-or conclusions"). Questions of the same kind must use exactly the same TYPE name.${typeLines(patterns)}
 - Write a FORMULA card for every formula, rule, shortcut or trick (F: the formula or rule, T: how to remember or use it fast, E: one small worked example).
 ${drawRules(fromFiles)}
-${variants ? "- After each question, add 2 practice questions of the same TYPE with changed numbers or a small twist (PQ:), each with its own A:, O: and S: lines.\n" : ""}- Put everything under a heading "## Subject › Topic" from this list:
+${variants ? "- After each question, add 2 practice questions of the same TYPE with changed numbers or a small twist (PQ:), each with its own A:, O:, S: and M2: lines.\n" : ""}- Put everything under a heading "## Subject › Topic" from this list:
 ${topicLines()}
 
 Reply ONLY in this plain-text format — no tables, no bold, no LaTeX, no extra text. Leave a blank line between questions:
@@ -134,13 +139,40 @@ A: ${item.a}
 PQ: (your first practice question)
 A: (answer)
 O: (3 wrong options separated by ;)
-S: (step-by-step solution, one or more S: lines)
+S: (Method 1: step-by-step solution, one or more S: lines)
+M2: (≈… s) (Method 2: the shortest way, one or more M2: lines)
 PQ: (your second practice question)
 A: …
 O: …; …; …
 S: …
+M2: …
 
 Write maths in plain text, never LaTeX: ×, ÷, √, ², π, fractions as a/b. Double-check every answer.`;
+}
+
+/**
+ * Prompt for the two methods of saved questions (Method 1 kept, Method 2 the shortest). The answer repeats each question
+ * and its answer, so the methods join the saved questions when pasted back.
+ */
+export function buildMethodsPrompt(items) {
+  return `You are an expert maths and reasoning teacher for ${EXAMS_TEXT}.
+
+For EACH question below, give two methods:
+- S: lines = Method 1, the standard step-by-step method (keep my given method if there is one, tidied).
+- M2: lines = Method 2, the SHORTEST way an exam topper would use (ratios or the unitary method, assumed values such as 100 or the LCM, options elimination, unit-digit / digit-sum checks, approximation, standard results and triplets), with about how many seconds it takes in brackets at the start of the first M2: line. If nothing is faster, write "M2: Method 1 is already the quickest; check: …".
+Keep my answers. Write maths in plain text, never LaTeX: ×, ÷, √, ², π, fractions as a/b.
+
+Reply ONLY in this plain-text format, repeating each question and answer exactly, with a blank line between questions:
+
+${items
+  .map(
+    (it) => `## ${it.subject} › ${it.topic}
+Q: ${it.q.replace(/\n/g, " ")}
+A: ${it.a}${it.solution ? `\nGiven method: ${it.solution.replace(/\n/g, " / ")}` : ""}
+S: …
+M2: (≈… s) …`,
+  )
+  .join("\n\n")}`;
 }
 
 /** Prompt for a figure for a saved question or formula card. The answer repeats it, so the figure joins the saved card. */
@@ -206,7 +238,10 @@ const CARD_LOOSE = /^(?:formula|rule|shortcut|concept)\s*\d{0,2}\s*[:\-–]\s*(.
 const TYPE_LINE = F("type|question type|pattern");
 const A_LINE = F("a|ans|answer|correct answer|right answer");
 const O_LINE = F("o|opts?|options?|wrong options?|wrong answers?|distractors?");
-const S_LINE = F("s|sol|solution|steps?|explanation|working|method");
+const S_LINE = F("s|sol|solution|steps?|explanation|working|method|m1|method\\s*1|standard method|long method");
+// Method 2 — checked before S_LINE, which would otherwise read "Method 2:" as a solution line.
+const M2_LINE = F("m2|method\\s*2|shortest(?:\\s+method)?|fastest(?:\\s+method)?|quick(?:est)?\\s+method|short\\s+method|shortcut\\s+method");
+const SECS = /^\(?\s*[≈~]?\s*(\d{1,3})\s*(?:s|sec|secs|seconds)\b\.?\s*\)?\s*[:\-–]?\s*/i;
 const FM_LINE = F("f|formula used|formula|rule used|rule");
 const T_LINE = F("t|trick|tip|shortcut|short trick|mnemonic|memory tip");
 const E_LINE = F("e|eg|e\\.g|example|worked example");
@@ -241,7 +276,7 @@ export function readQuant(textIn) {
       if (cur.kind === "question" && letter && cur.letters[letter[1].toLowerCase()]) cur.a = cur.letters[letter[1].toLowerCase()];
       const options = [...new Set([...cur.options, ...Object.values(cur.letters)].map((o) => o.trim()).filter((o) => o && norm(o) !== norm(cur.a)))];
       const { letters, ...item } = cur;
-      out.push({ ...item, options, solution: item.solution.trim(), formula: item.formula.trim(), trick: item.trick.trim() });
+      out.push({ ...item, options, solution: item.solution.trim(), shortcut: item.shortcut.trim(), formula: item.formula.trim(), trick: item.trick.trim() });
     }
     cur = null;
     field = null;
@@ -249,7 +284,7 @@ export function readQuant(textIn) {
   const start = (kind, q, extra = {}) => {
     finish();
     rest.push("");
-    cur = { id: uid(n++), kind, q: q.trim(), a: "", options: [], letters: {}, solution: "", formula: "", trick: "", figure: pendingFig, difficulty: 0, pattern, ...place, ...extra };
+    cur = { id: uid(n++), kind, q: q.trim(), a: "", options: [], letters: {}, solution: "", shortcut: "", fastSecs: 0, formula: "", trick: "", figure: pendingFig, difficulty: 0, pattern, ...place, ...extra };
     pendingFig = "";
     field = "q";
   };
@@ -309,6 +344,7 @@ export function readQuant(textIn) {
       field = null; // a blank line ends a multi-line answer, solution or trick
       continue;
     }
+    if (/^given\s+(?:method|solution|working)\s*[:\-–]/i.test(l)) continue; // echoed from the methods prompt
     let m;
     if ((m = TYPE_LINE.exec(l)) && m[1]) {
       pattern = m[1].trim();
@@ -337,13 +373,19 @@ export function readQuant(textIn) {
       cur.options.push(...(parts.length > 1 ? parts : m[1].split(/\s*,\s+/)));
       field = null;
     } else if ((m = A_LINE.exec(l)) && cur.kind === "question") (cur.a = m[1].trim()), (field = null);
-    else if ((m = S_LINE.exec(l))) add("solution", m[1]);
+    else if ((m = M2_LINE.exec(l)) && cur.kind === "question") {
+      let v = m[1];
+      const secs = SECS.exec(v);
+      if (secs) (cur.fastSecs = cur.fastSecs || Number(secs[1])), (v = v.slice(secs[0].length));
+      if (v.trim()) add("shortcut", v);
+      else field = "shortcut";
+    } else if ((m = S_LINE.exec(l))) add("solution", m[1]);
     else if ((m = FM_LINE.exec(l))) add("formula", m[1]);
     else if ((m = T_LINE.exec(l))) add("trick", m[1]);
     else if ((m = E_LINE.exec(l))) add("solution", m[1]);
     else if ((m = D_LINE.exec(l))) cur.difficulty = Number(m[1]) || 0;
     else if (cur.kind === "question" && !cur.a && (m = LETTER_OPTION.exec(l))) cur.letters[m[1].toLowerCase()] = m[2].trim();
-    else if (field === "q" || field === "solution" || field === "formula" || field === "trick") cur[field] = `${cur[field]}\n${l}`.trim();
+    else if (field === "q" || field === "solution" || field === "shortcut" || field === "formula" || field === "trick") cur[field] = `${cur[field]}\n${l}`.trim();
     else {
       finish();
       rest.push("", l);

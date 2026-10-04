@@ -9,6 +9,7 @@ import { ALL_TOPICS, CA, CA_TOPICS, PLACES, SEP, TAXONOMY, topicKey } from "./li
 import { findDuplicate, isFact, itemsToCSV, makeItem, textToItems } from "./lib/gk.js";
 import { buildTree, labelOf, nodeState, toggle } from "./lib/gk-topics.js";
 import { placeTitle, placeTrail } from "./lib/area.js";
+import { SORTS, sections, sortItems } from "./lib/sortlist.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
 import { todayISO } from "./lib/words.js";
@@ -40,6 +41,8 @@ export function createGkUI(ctx) {
     search: "",
     browse: "", // Topics screen: the open node ("" = all subjects)
     tab: "all", // Topics screen: "all" | "mine" | "bank"
+    layout: "topics", // Topics screen: "topics" (subject → chapter) or "list" (one sorted list)
+    sort: "newest",
     pickerOpen: new Set(), // expanded nodes in the practice topic picker
     qotdShown: false,
   };
@@ -700,19 +703,36 @@ export function createGkUI(ctx) {
         .join("")}
     </div>`;
     const search = `<input type="search" id="kSearch" placeholder="Search all questions and answers" value="${esc(gui.search)}" autocomplete="off" />`;
-    const listOf = (items) =>
+    const listOf = (items, { where = false } = {}) =>
       items.length
         ? `<ul class="word-list rule-list">${items
             .slice(0, LIST_SHOWN)
             .map(
               (it) => `<li data-action="k-open" data-id="${esc(it.id)}">
-                <div><b>${esc(it.q)}</b><span class="muted small block">${it.a ? `✓ ${esc(it.a)}` : "fact"}</span></div>
+                <div><b>${esc(it.q)}</b><span class="muted small block">${it.a ? `✓ ${esc(it.a)}` : "fact"}${where ? ` · ${ICON(it.category)} ${esc(placeLabel(it))}` : ""}</span></div>
                 <span class="badge ${stage(it)}">${STAGE_LABEL[stage(it)]}</span>
               </li>`,
             )
             .join("")}</ul>${items.length > LIST_SHOWN ? `<p class="muted small center">Showing ${LIST_SHOWN} of ${items.length}. Search to narrow down.</p>` : ""}`
         : `<p class="muted center">No questions here yet.</p>`;
 
+    const layout = `<div class="chips layout-chips">
+      <button type="button" class="chip ${gui.layout === "topics" ? "on" : ""}" data-action="k-layout" data-layout="topics">🗂️ By topic</button>
+      <button type="button" class="chip ${gui.layout === "list" ? "on" : ""}" data-action="k-layout" data-layout="list">📋 List · newest first & more</button>
+    </div>`;
+    if (gui.layout === "list" && !term) {
+      const sorted = sortItems(all, gui.sort);
+      const parts = sections(sorted.slice(0, 300), gui.sort);
+      return `${tabs}<h1>Topics</h1>${search}${layout}
+        <label class="field">Order
+          <select data-input="k-sort">${SORTS.map(([k, l]) => `<option value="${k}" ${gui.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        ${
+          sorted.length
+            ? parts.map((sec) => `${sec.label ? `<h3 class="day-head">${esc(sec.label)} <span class="muted small">${sec.items.length}</span></h3>` : ""}${listOf(sec.items, { where: true })}`).join("")
+            : `<p class="muted center">No questions here yet.</p>`
+        }
+        ${sorted.length > 300 ? `<p class="muted small center">Showing 300 of ${sorted.length}. Search to narrow down.</p>` : ""}`;
+    }
     if (term) {
       const hits = all.filter((i) => `${i.q} ${i.a} ${i.explain} ${i.sub}`.toLowerCase().includes(term));
       return `${tabs}<h1>Topics</h1>${search}<p class="muted small">${`${hits.length} match${hits.length === 1 ? "" : "es"}`}</p>${listOf(hits)}`;
@@ -731,7 +751,7 @@ export function createGkUI(ctx) {
     return `
       ${tabs}
       <div class="row between"><h1>${node ? esc(labelOf(node)) : "Topics"}</h1><button class="btn small" type="button" data-action="k-new">＋ New</button></div>
-      ${search}
+      ${search}${node ? "" : layout}
       ${crumbs}
       ${!node ? `<p class="muted small">Coverage map — the bar shows questions asked in this practice round (light) and mastered (dark).</p>` : ""}
       ${!node ? areaEntry() : ""}
@@ -1084,6 +1104,11 @@ export function createGkUI(ctx) {
       gk.update((s) => (s.prefs.excluded = [...(tree.get("") || [])]), { touchesData: false });
       render();
     },
+    "k-layout": (el) => {
+      gui.layout = el.dataset.layout === "list" ? "list" : "topics";
+      gui.browse = "";
+      render();
+    },
     "k-tab": (el) => {
       gui.tab = el.dataset.tab;
       gui.browse = "";
@@ -1106,6 +1131,11 @@ export function createGkUI(ctx) {
 
   async function onChange(e) {
     const t = e.target;
+    if (t.dataset.input === "k-sort") {
+      gui.sort = t.value;
+      render();
+      return true;
+    }
     if (t.dataset.input === "k-files") {
       const files = [...t.files];
       t.value = "";

@@ -28,12 +28,24 @@ export function quantSystem({ exam }, patterns = {}) {
     "'Circular seating facing centre'). Questions of the same kind must get exactly the same pattern name.",
     ...(types.length ? ["Existing pattern names to reuse where they fit:", ...types] : []),
     "`trick` is a short shortcut or memory aid; `formula` is the formula or rule used.",
+    ...METHODS_SYSTEM,
     ...FIGURE_SYSTEM,
   ].join("\n");
 }
 
 const str = (description) => ({ type: "string", description });
 
+// Every question gets two ways to the answer: the standard one and the shortest one.
+const METHODS_SYSTEM = [
+  "Every question gets TWO methods. `solution` = Method 1, the standard method, one step per line; when the material shows",
+  "its own working, keep that working as Method 1 (tidied, and corrected only if wrong). `shortcut` = Method 2, the SHORTEST",
+  "way an exam topper would use: ratios or the unitary method, assumed values (take 100 or the LCM), options elimination,",
+  "unit-digit / digit-sum checks, approximation, standard results and triplets — fewer steps than Method 1, one step per",
+  "line. `seconds` = about how many seconds Method 2 takes in the exam. If nothing is faster than Method 1, give the",
+  "quickest alternative check and start it with \"Method 1 is already the quickest; check:\".",
+];
+const SHORTCUT_FIELD = str("Method 2: the shortest method, one step per line (see the rules). Formulas: empty.");
+const SECONDS_FIELD = { type: "integer", description: "About how many seconds Method 2 takes. Formulas: 0." };
 const FIGURE_SYSTEM = [
   "`draw`: for geometry, mensuration, trigonometry (heights and distances) and any item where a diagram helps, describe",
   "the figure in DRAW lines — never coordinates or SVG; the app computes every point exactly. Use the same letters as",
@@ -46,12 +58,14 @@ const DRAW_FIELD = str('DRAW lines describing the figure (one command per line, 
 const PRACTICE = {
   type: "object",
   additionalProperties: false,
-  required: ["q", "a", "options", "solution", "draw"],
+  required: ["q", "a", "options", "solution", "shortcut", "seconds", "draw"],
   properties: {
     q: str("A practice question of the same type with changed numbers or a small twist."),
     a: str("Its correct answer."),
     options: { type: "array", items: { type: "string" }, description: "Exactly 3 believable WRONG options." },
-    solution: str("Step-by-step solution, one step per line."),
+    solution: str("Method 1: step-by-step solution, one step per line."),
+    shortcut: SHORTCUT_FIELD,
+    seconds: SECONDS_FIELD,
     draw: DRAW_FIELD,
   },
 };
@@ -67,11 +81,12 @@ export const Q_LIST_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "q", "a", "options", "figure_box", "source", "page"],
+        required: ["kind", "q", "a", "options", "working", "figure_box", "source", "page"],
         properties: {
           kind: str('"question" or "formula" (a formula, rule, shortcut or trick).'),
           q: str("The question as written, or the formula's name."),
           a: str("The answer given in the material (empty if none), or the formula itself."),
+          working: str("The solution / working written in the material for this question, as written (empty if none)."),
           options: { type: "array", items: { type: "string" }, description: "Options given in the material, if any." },
           figure_box: {
             type: "array",
@@ -97,13 +112,15 @@ export const Q_CARD_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "q", "a", "options", "solution", "formula", "trick", "draw", "subject", "topic", "pattern", "difficulty", "aiAnswered", "similar"],
+        required: ["kind", "q", "a", "options", "solution", "shortcut", "seconds", "formula", "trick", "draw", "subject", "topic", "pattern", "difficulty", "aiAnswered", "similar"],
         properties: {
           kind: str('"question" or "formula".'),
           q: str("The question (clear, exam-style) or the formula's name."),
           a: str("The correct answer (questions); empty for formulas."),
           options: { type: "array", items: { type: "string" }, description: "Questions: exactly 3 believable WRONG options. Formulas: empty." },
-          solution: str("Questions: step-by-step solution, one step per line. Formulas: one small worked example."),
+          solution: str("Questions: Method 1, the standard step-by-step solution (the material's own working if it shows one), one step per line. Formulas: one small worked example."),
+          shortcut: SHORTCUT_FIELD,
+          seconds: SECONDS_FIELD,
           formula: str("The formula or rule used (or the formula itself for a formula card)."),
           trick: str("A short shortcut or memory trick."),
           draw: DRAW_FIELD,
@@ -123,20 +140,24 @@ export const qListInstruction = () =>
   "Read ALL the material above (it may be handwritten notes, a scanned PDF, a class slide or a book page), including margins " +
   "and anything circled or underlined. List EVERY question in it (with its answer and options if given) and EVERY formula, " +
   "rule, shortcut or trick (kind = formula, q = its name, a = the formula itself), in order. Do not skip or merge any. " +
+  "Copy any working / solution written for a question into `working`. " +
   "When an item has a figure or diagram (triangles, circles, graphs…), give figure_box around just that figure and its " +
   "labels, as [ymin, xmin, ymax, xmax] on a 0–1000 scale of the page, with the file number (source) and page.";
 
 export const qCardInstruction = (items, variants) =>
   `Complete a card for EACH of these ${items.length} items, in the same order — exactly ${items.length} card(s). For a question: ` +
   "solve it; keep the given answer unless it is wrong (then correct it and set aiAnswered = true); if no answer is given, supply " +
-  `it and set aiAnswered = true. ${variants ? "In `similar`, write exactly 2 practice questions of the same type with changed numbers or a small twist, each fully solved." : "Leave `similar` empty."} ` +
+  "it and set aiAnswered = true. Keep a given method as Method 1 (`solution`) and add the shortest method as Method 2 (`shortcut`). " +
+  `${variants ? "In `similar`, write exactly 2 practice questions of the same type with changed numbers or a small twist, each fully solved." : "Leave `similar` empty."} ` +
   "For a formula: q = its name, formula = the formula or rule, trick = how to remember or use it fast, solution = one small worked example, similar = [].\n\n" +
   items
     .map(
       (it, i) =>
         `${i + 1}. [${it.kind === "formula" ? "formula" : "question"}] ${String(it.q).slice(0, 600)}${
           it.kind === "formula" ? (it.formula ? ` | Formula: ${it.formula}` : "") : it.a ? ` | Given answer: ${it.a}` : " | No answer given"
-        }${it.options?.length ? ` | Given options: ${it.options.slice(0, 5).join(" / ")}` : ""}`,
+        }${it.options?.length ? ` | Given options: ${it.options.slice(0, 5).join(" / ")}` : ""}${
+          it.kind !== "formula" && it.solution ? ` | Given method: ${String(it.solution).replace(/\n/g, " / ").slice(0, 700)}` : ""
+        }`,
     )
     .join("\n");
 
@@ -223,7 +244,9 @@ export async function quantFromFiles(s, sources, source, opts, onProgress) {
   const items = listed.words
     .filter((x) => x && x.q)
     .map((x) => ({
-      ...(x.kind === "formula" ? { kind: "formula", q: String(x.q), formula: String(x.a || "") } : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [] }),
+      ...(x.kind === "formula"
+        ? { kind: "formula", q: String(x.q), formula: String(x.a || "") }
+        : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], solution: String(x.working || "") }),
       source,
       crop: cropOf(x),
     }));
@@ -284,7 +307,11 @@ export async function quantFromText(s, text, opts, onProgress) {
     info.usedBy.add(listed.provider);
     items = listed.words
       .filter((x) => x && x.q)
-      .map((x) => (x.kind === "formula" ? { kind: "formula", q: String(x.q), formula: String(x.a || ""), source: "Typed" } : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], source: "Typed" }));
+      .map((x) =>
+        x.kind === "formula"
+          ? { kind: "formula", q: String(x.q), formula: String(x.a || ""), source: "Typed" }
+          : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], solution: String(x.working || ""), source: "Typed" },
+      );
     if (!items.length) throw new AllProvidersFailed([{ name: listed.provider, reason: "found nothing to save" }]);
   }
   return result(await completeCards(s, items, opts, onProgress, info), info);
@@ -386,6 +413,72 @@ export async function practiceFor(s, item, patterns) {
     .map((p) => makeQItem({ ...p, kind: "question", variantOf: item.id, pattern: item.pattern || card.pattern, subject: item.subject, topic: item.topic, formula: item.formula || card.formula, trick: item.trick || card.trick, aiMade: true, source: `AI · practice` }));
   info.usedBy.add(res.provider);
   return practice.length ? { items: practice, provider: res.provider, card } : null;
+}
+
+// ---------- two methods for saved questions ----------
+export const METHODS_BATCH = 6;
+export const METHODS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["items"],
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["n", "solution", "shortcut", "seconds"],
+        properties: {
+          n: { type: "integer", description: "The question's number in the list." },
+          solution: str("Method 1: the standard step-by-step solution (keep the given one, tidied, unless it is wrong)."),
+          shortcut: SHORTCUT_FIELD,
+          seconds: SECONDS_FIELD,
+        },
+      },
+    },
+  },
+};
+
+/**
+ * Method 1 (kept, or written if missing) and Method 2 (the shortest way) for saved questions, METHODS_BATCH at a time.
+ * Resolves {done: [{id, solution, shortcut, fastSecs}], provider, failed}. The saved answer is never changed.
+ */
+export async function methodsFor(s, items, onProgress) {
+  const done = [];
+  const used = new Set();
+  let failed = 0;
+  for (let i = 0; i < items.length; i += METHODS_BATCH) {
+    const batch = items.slice(i, i + METHODS_BATCH);
+    onProgress?.(`Finding the shortest methods… ${Math.min(items.length, i + batch.length)} of ${items.length}`);
+    try {
+      const res = await aiTask(
+        s,
+        {
+          system: quantSystem(s),
+          schema: METHODS_SCHEMA,
+          text:
+            `For EACH of these ${batch.length} questions, give Method 1 (the standard method — keep the given one) and Method 2 (the shortest method), ` +
+            "with `n` = its number. The answers are given: keep them.\n\n" +
+            batch
+              .map((it, k) => `${k + 1}. ${it.q.replace(/\n/g, " ")} | Answer: ${it.a}${it.solution ? ` | Given method: ${it.solution.replace(/\n/g, " / ").slice(0, 700)}` : ""}`)
+              .join("\n"),
+        },
+        null,
+      );
+      used.add(res.provider);
+      for (const r of res.words) {
+        const it = batch[Math.round(Number(r?.n)) - 1];
+        if (!it || !String(r.shortcut || "").trim()) continue;
+        const x = makeQItem({ kind: "question", q: it.q, solution: r.solution, shortcut: r.shortcut, seconds: r.seconds });
+        done.push({ id: it.id, solution: it.solution || x.solution, shortcut: x.shortcut, fastSecs: x.fastSecs });
+      }
+    } catch (e) {
+      if (!(e instanceof AllProvidersFailed)) throw e;
+      if (!done.length && i === 0) throw e;
+      failed += batch.length;
+    }
+  }
+  return { done, provider: [...used].join(" + "), failed };
 }
 
 /** Figure schema: DRAW lines for one figure. */

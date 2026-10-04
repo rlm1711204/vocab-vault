@@ -53,7 +53,9 @@ export function makeQItem(input = {}, now = new Date()) {
     q: text(input.q ?? input.question ?? input.title, 1200) || "Untitled",
     a: kind === "formula" ? "" : a,
     options: kind === "formula" ? [] : options, // WRONG options only
-    solution: text(input.solution ?? input.example, 1500), // steps (questions) or a worked example (formulas)
+    solution: text(input.solution ?? input.example, 1500), // Method 1: steps (questions) or a worked example (formulas)
+    shortcut: kind === "formula" ? "" : text(input.shortcut ?? input.method2, 1200), // Method 2: the shortest way to the answer
+    fastSecs: kind === "formula" ? 0 : clampInt(input.fastSecs ?? input.seconds, 0, 900, 0), // about how long Method 2 takes
     formula: text(input.formula ?? (kind === "formula" ? input.a : ""), 800),
     trick: text(input.trick, 600),
     draw: cleanDraw(input.draw), // the figure as construction lines; the app draws it exactly (see geodraw.js)
@@ -127,12 +129,12 @@ export function matchPattern(name, existing) {
 
 export function qItemsToCSV(items) {
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["Kind", "Subject", "Topic", "Type", "Question / Formula name", "Answer", "Wrong options", "Solution / Example", "Formula", "Trick", "Practice question of"];
+  const head = ["Kind", "Subject", "Topic", "Type", "Question / Formula name", "Answer", "Wrong options", "Method 1 / Example", "Method 2 (shortest)", "Seconds", "Formula", "Trick", "Practice question of"];
   const byId = new Map(items.map((i) => [i.id, i]));
   return [
     head.join(","),
     ...items.map((i) =>
-      [KINDS[i.kind], i.subject, i.topic, i.pattern, i.q, i.a, i.options.join("; "), i.solution, i.formula, i.trick, byId.get(i.variantOf)?.q || ""].map(cell).join(","),
+      [KINDS[i.kind], i.subject, i.topic, i.pattern, i.q, i.a, i.options.join("; "), i.solution, i.shortcut, i.fastSecs || "", i.formula, i.trick, byId.get(i.variantOf)?.q || ""].map(cell).join(","),
     ),
   ].join("\n");
 }
