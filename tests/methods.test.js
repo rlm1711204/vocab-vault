@@ -88,3 +88,31 @@ describe("sorted list of saved questions", () => {
     expect(sections([{ id: "f", book: true, addedAt: "2026-01-01T00:00:00Z" }], "newest", now)[0].label).toBe("Built in");
   });
 });
+
+describe("solutions from your notes, your own solution, and the built-in solver", () => {
+  it("keeps the PDF's own working as Method 1, word for word, and the AI adds Method 2", async () => {
+    const { quantFromFiles } = await import("../src/lib/quant-ai.js");
+    reply = async (task) =>
+      Object.keys(task.schema.properties.items.items.properties).includes("figure_box")
+        ? { words: [{ kind: "question", q: "A does a work in 10 days, B in 15. Together?", a: "6 days", options: [], working: "LCM = 30 units\nA = 3/day, B = 2/day\n30/5 = 6 days", figure_box: [], source: 1, page: 1 }], provider: "Gemini", skipped: [] }
+        : { words: [{ kind: "question", q: "A does a work in 10 days, B in 15. Together?", a: "6 days", options: ["5", "8", "12"], solution: "The AI's own long method", shortcut: "Product ÷ sum = 6", seconds: 8, formula: "", trick: "", draw: "", subject: "Quant", topic: "Time & Work", pattern: "Two workers", difficulty: 2, aiAnswered: false, similar: [] }], provider: "Gemini", skipped: [] };
+    const r = await quantFromFiles({}, [{ kind: "pdf", name: "n.pdf", mediaType: "application/pdf", data: "x" }], "n.pdf", { variants: false, patterns: {} });
+    expect(calls[1].text).toMatch(/Given method: LCM = 30 units \/ A = 3\/day/);
+    expect(r.items[0]).toMatchObject({ solution: "LCM = 30 units\nA = 3/day, B = 2/day\n30/5 = 6 days", solutionFrom: "notes", shortcut: "Product ÷ sum = 6", a: "6 days" });
+  });
+
+  it("reads 'My solution:' lines into the learner's own solution", () => {
+    const [it] = readQuant("## Quant › Percentage\nQ: 20% of 50?\nA: 10\nS: 50 × 0.2 = 10\nMy solution: 10% is 5\ndouble it → 10").items;
+    expect(it).toMatchObject({ solution: "50 × 0.2 = 10", mySolution: "10% is 5\ndouble it → 10" });
+    expect(makeQItem(it).mySolution).toBe("10% is 5\ndouble it → 10");
+  });
+
+  it("answers calculation questions offline with the built-in solver (free mode)", async () => {
+    const { readNotes } = await import("../src/lib/quant-ai.js");
+    const items = readNotes("Simplify: 3/4 + 5/6 × 2\nSolve 3x + 5 = 20\nSpeed = Distance / Time\nA train crosses a pole in 10 s. Speed?", "Typed");
+    const solved = items.filter((x) => x.solver);
+    expect(solved.map((x) => [x.q, x.a])).toEqual([["Simplify: 3/4 + 5/6 × 2", "29/12 (≈ 2.4167)"], ["Solve 3x + 5 = 20", "x = 5"]]);
+    expect(solved[1].solution).toMatch(/3x = 15/);
+    expect(items.some((x) => x.kind === "formula" && /Speed/.test(x.q))).toBe(true);
+  });
+});

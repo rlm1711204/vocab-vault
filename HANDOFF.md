@@ -85,6 +85,11 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   Q_LIST_SCHEMA and passed on as "Given method"), `shortcut` + `fastSecs` = Method 2 (shortest). Copied prompts use `M2:`
   lines (read before `S:`, which would otherwise take "Method 2:"). `methodsFor` / `buildMethodsPrompt` fill saved
   questions; a pasted methods answer is read without AI (`gui.copied === "methods"`) and fills via `addItems` (FILLABLE).
+- Built-in solver (src/lib/solver.js, no dependencies): own parser (`parse` / `evaluate`), `solveQuestion` (detectors in
+  order: HCF/LCM, interest, average, percent, equations, simplify — each fires only on an exact shape, else null),
+  `checkSteps` (the maths right next to each "=", labels and unit words left out). Used by readNotes (free mode:
+  `solver: true` items), the review badge, the card's solver block and the step-check lines under each method.
+- `mySolution` (learner's own) and `solutionFrom: "notes"` (Method 1 = the PDF's `working`, enforced in completeCards).
 - Sorted list (Maths, Reasoning, GK Topics → 📋 List): src/lib/sortlist.js (`sortItems`, `sections` by day added).
 - AI limits & usage (Settings card, src/usage-ui.js + src/lib/usage.js): gemini.js / compat.js / ai.js / freedict.js
   call `countRequest` (not for a 429), `noteHeaders` (any `x-ratelimit-*` / `anthropic-ratelimit-*` the browser may read)

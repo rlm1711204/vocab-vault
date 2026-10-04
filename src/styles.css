@@ -433,6 +433,16 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .rule-block.bad { background: var(--bad-soft); }
 .rule-block.bad > b { color: var(--bad); }
 .rule-block.fast { background: var(--saffron-soft); }
+.rule-block.mine { background: var(--primary-soft); }
+.rule-block.mine > b { color: var(--primary); }
+.rule-block.solver { background: var(--surface-2); border: 1px dashed var(--line); }
+.rule-block .warn { margin: 6px 0 0; }
+.rule-block p.small { margin: 6px 0 0; }
+.cand-sol-btn { margin: 4px 0 0 30px; }
+.cand-sol { margin: 4px 0 6px 30px; }
+.mysol-box { display: grid; gap: 4px; margin: 8px 0; }
+.mysol-box textarea { width: 100%; box-sizing: border-box; }
+.solver-badge { background: var(--surface-2); }
 .rule-block.fast > b { color: var(--saffron); }
 .fast-line b { color: var(--saffron); }
 .mistake { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }

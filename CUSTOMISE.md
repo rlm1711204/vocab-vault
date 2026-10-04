@@ -205,6 +205,7 @@ E: 20% of 50% of 400 = 40.
 | `F:` | the formula or rule (several `F:` lines are fine) |
 | `T:` | the trick — how to remember or use it fast |
 | `E:` | one small worked example |
+| `My solution:` | questions: your own solution (one or more lines) |
 | `M2:` | questions: Method 2, the shortest method (one or more lines); its time in brackets at the start, e.g. `M2: (≈10 s) Product ÷ sum = 6` |
 | `DRAW:` | optional, best for a figure: one construction step per line, no coordinates — the app computes the geometry exactly, e.g. `DRAW: circle O r=5`, `DRAW: point P outside O dist=13`, `DRAW: tangents T from P to O`, `DRAW: right O T P`, `DRAW: label O P "13"`. The full command list is `DRAW_GUIDE` in `src/lib/geodraw.js`; a figure with any mistake is not shown |
 | `FIG:` | optional: a figure as SVG on one line, e.g. `FIG: <svg viewBox="0 0 240 160">…</svg>` — use `stroke="currentColor"` and `fill="none"` so it works in dark mode, and `class="hl"` on the part to highlight |

@@ -9,6 +9,7 @@ import { makeQItem } from "./quant.js";
 import { DRAW_GUIDE, drawFigure } from "./geodraw.js";
 import { cleanDraw } from "./quant.js";
 import { formulaLines, isQComplete, looksQuantStructured, readQuant } from "./quant-prompt.js";
+import { solveQuestion } from "./solver.js";
 
 export const QBATCH = 5;
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
@@ -216,7 +217,11 @@ async function completeCards(s, items, { variants, patterns }, onProgress, info)
       }
       // The item keeps its id, so practice questions pasted with it stay linked.
       // The item keeps its id (so pasted practice questions stay linked) and where its figure is on the page.
-      for (const [it, card] of pairs) out.push(...cardToItems({ ...card, kind: it.kind === "formula" ? "formula" : card.kind, crop: it.crop }, { source: it.source || "", keepAnswer: it.a, id: it.id || uid() }));
+      // A solution written in the learner's own PDF / notes is kept as Method 1, word for word (the AI adds Method 2).
+      for (const [it, card] of pairs) {
+        const own = it.solutionFrom === "notes" && it.solution ? { solution: it.solution, solutionFrom: "notes" } : {};
+        out.push(...cardToItems({ ...card, ...own, kind: it.kind === "formula" ? "formula" : card.kind, crop: it.crop, mySolution: it.mySolution || "" }, { source: it.source || "", keepAnswer: it.a, id: it.id || uid() }));
+      }
       for (const it of missing) (info.failed += 1), out.push(it);
       if (missing.length) info.notes.add(`The AI left out ${missing.length} item(s); they were saved as written.`);
     } catch (e) {
@@ -246,7 +251,7 @@ export async function quantFromFiles(s, sources, source, opts, onProgress) {
     .map((x) => ({
       ...(x.kind === "formula"
         ? { kind: "formula", q: String(x.q), formula: String(x.a || "") }
-        : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], solution: String(x.working || "") }),
+        : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], solution: String(x.working || ""), solutionFrom: x.working ? "notes" : "" }),
       source,
       crop: cropOf(x),
     }));
@@ -256,12 +261,27 @@ export async function quantFromFiles(s, sources, source, opts, onProgress) {
 
 /** Questions ("Q: … A: …", "question? answer", MCQs) and formula lines ("Speed = Distance / Time") from free notes. */
 export function readNotes(text, source) {
-  const formulas = formulaLines(text);
+  // Calculation questions without an answer ("Simplify: 3/4 + 5/6 × 2", "Solve 3x + 5 = 20") are answered by the
+  // built-in solver, with its steps — no AI needed.
+  const solved = [];
+  const keep = [];
+  const all = String(text || "").split("\n");
+  for (const [i, raw] of all.entries()) {
+    const q = raw.trim().replace(/^(?:q(?:uestion)?\s*\d{0,3}\s*[:.)\-–]|\d{1,3}\s*[.)])\s*/i, "");
+    const answered = /^(?:a|ans|answer)\s*[:.\-–]/i.test((all[i + 1] || "").trim());
+    const asks = /\?|=\s*\?|^(?:simplify|find|solve|evaluate|calculate|compute|what|if)\b/i.test(q);
+    const r = q && asks && !answered ? solveQuestion(q) : null;
+    if (r) solved.push({ kind: "question", q, a: r.answer, solution: r.steps.join("\n"), solver: true, source });
+    else keep.push(raw);
+  }
+  const rest = keep.join("\n");
+  const formulas = formulaLines(rest);
   const isFormula = new Set(formulas.map((f) => f.q));
   return [
-    ...textToItems(text)
+    ...solved,
+    ...textToItems(rest)
       .filter((x) => x.a && !isFormula.has(x.q))
-      .map((x) => ({ kind: "question", q: x.q, a: x.a, options: x.options, solution: x.explain || "", trick: x.trick || "", source })),
+      .map((x) => ({ kind: "question", q: x.q, a: x.a, options: x.options, solution: x.explain || "", solutionFrom: x.explain ? "notes" : "", trick: x.trick || "", source })),
     ...formulas.map((f) => ({ ...f, source })),
   ];
 }
@@ -310,7 +330,7 @@ export async function quantFromText(s, text, opts, onProgress) {
       .map((x) =>
         x.kind === "formula"
           ? { kind: "formula", q: String(x.q), formula: String(x.a || ""), source: "Typed" }
-          : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], solution: String(x.working || ""), source: "Typed" },
+          : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], solution: String(x.working || ""), solutionFrom: x.working ? "notes" : "", source: "Typed" },
       );
     if (!items.length) throw new AllProvidersFailed([{ name: listed.provider, reason: "found nothing to save" }]);
   }

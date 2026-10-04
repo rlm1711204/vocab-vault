@@ -14,6 +14,7 @@ import { cropFigure, normBox, padBox } from "./lib/figcrop.js";
 import { pagePicture } from "./lib/extract.js";
 import { labelOf, nodeState, toggle } from "./lib/gk-topics.js";
 import { SORTS, sections, sortItems } from "./lib/sortlist.js";
+import { checkSteps, sameAnswer, solveQuestion } from "./lib/solver.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
 import { todayISO } from "./lib/words.js";
@@ -112,6 +113,7 @@ export function createQuantUI(ctx, part) {
             }</p>
             ${it.options.length ? `<p class="muted small">Not: ${esc(it.options.join(" · "))}</p>` : ""}
             ${methodsBlock(it)}
+            ${solverBlock(it)}
             ${it.formula ? `<div class="formula-box"><b>📐 Formula</b>${lines(it.formula)}</div>` : ""}
             ${it.trick ? `<div class="tip"><strong>💡 Trick</strong>${lines(it.trick)}</div>` : ""}`
           : ""
@@ -122,9 +124,38 @@ export function createQuantUI(ctx, part) {
   const setBusyToast = (t) => toast(t, 120000);
 
   /** Method 1 (the standard way, or the material's own working) and ⚡ Method 2 (the shortest way). */
-  const methodsBlock = (it) =>
-    `${it.solution ? `<div class="rule-block ok"><b>${it.shortcut ? "Method 1 · Standard" : "Solution"}</b>${lines(it.solution)}</div>` : ""}
-     ${it.shortcut ? `<div class="rule-block fast"><b>⚡ Method 2 · Shortest${it.fastSecs ? ` <span class="badge learning">≈ ${it.fastSecs} s</span>` : ""}</b>${lines(it.shortcut)}</div>` : ""}`;
+  const methodsBlock = (it, { check = true } = {}) => {
+    const note = (text) => {
+      if (!check) return "";
+      const c = checkSteps(text);
+      if (c.wrong.length)
+        return c.wrong.map((w) => `<p class="small warn">⚠ Check: ${esc(w.left)} works out to <strong>${esc(w.expected)}</strong>, not ${esc(w.right)}.</p>`).join("");
+      return c.checked ? `<p class="small muted">🧮 ${plural(c.checked, "calculation")} re-checked ✓</p>` : "";
+    };
+    const m1 = it.solutionFrom === "notes" ? "Method 1 · From your notes / PDF" : it.shortcut ? "Method 1 · Standard" : "Solution";
+    return `${it.mySolution ? `<div class="rule-block mine"><b>✍️ My solution</b>${lines(it.mySolution)}${note(it.mySolution)}</div>` : ""}
+     ${it.solution ? `<div class="rule-block ok"><b>${m1}</b>${lines(it.solution)}${note(it.solution)}</div>` : ""}
+     ${it.shortcut ? `<div class="rule-block fast"><b>⚡ Method 2 · Shortest${it.fastSecs ? ` <span class="badge learning">≈ ${it.fastSecs} s</span>` : ""}</b>${lines(it.shortcut)}${note(it.shortcut)}</div>` : ""}`;
+  };
+
+  /** The built-in solver's own working for calculation questions, and whether it agrees with the saved answer. */
+  function solverBlock(it) {
+    if (it.kind !== "question") return "";
+    const r = solveQuestion(it.q);
+    if (!r) return "";
+    const same = it.a ? sameAnswer(r.answer, it.a) : null;
+    return `<div class="rule-block solver"><b>🧮 Built-in solver · ${esc(r.method)}</b>${lines(r.steps.join("\n"))}
+      <p class="small"><b>Answer: ${esc(r.answer)}</b> ${
+        it.solver ? "" : same === true ? `<span class="badge mastered">✓ agrees with the saved answer</span>` : same === false ? `<span class="badge easy">⚠ the saved answer is ${esc(it.a)} — check it</span>` : ""
+      }</p></div>`;
+  }
+  /** One line for the review screen: does the built-in solver agree? */
+  function solverBadge(it) {
+    if (it.kind !== "question" || it.solver) return it.solver ? ` <span class="badge solver-badge">🧮 Built-in solver</span>` : "";
+    const r = solveQuestion(it.q);
+    if (!r || !it.a) return "";
+    return sameAnswer(r.answer, it.a) === false ? ` <span class="badge easy">⚠ Solver got ${esc(r.answer)}</span>` : ` <span class="badge mastered">🧮 ✓</span>`;
+  }
   const formulaBlock = (it) =>
     `${it.formula ? `<div class="formula-box">${lines(it.formula)}</div>` : ""}
      ${it.trick ? `<div class="tip"><strong>💡 Trick</strong>${lines(it.trick)}</div>` : ""}
@@ -425,11 +456,23 @@ export function createQuantUI(ctx, part) {
                   ${
                     it.kind === "formula"
                       ? `<span class="small">${lines(it.formula || "(no formula)")}</span>`
-                      : `<span>✓ ${esc(it.a || "—")}${it.aiAnswered ? ` <span class="badge learning">AI answer · check</span>` : ""}</span>`
+                      : `<span>✓ ${esc(it.a || "—")}${it.aiAnswered ? ` <span class="badge learning">AI answer · check</span>` : ""}${solverBadge(it)}</span>`
                   }
                   ${it.trick ? `<span class="small muted">💡 ${esc(it.trick.split("\n")[0])}</span>` : ""}
                 </span>
               </label>
+              ${
+                it.kind === "question"
+                  ? `<button class="btn small ghost cand-sol-btn" type="button" data-action="${P}-cand-sol" data-i="${i}">${row.showSol ? "▾ Hide solutions" : `▸ 👀 Solutions${it.mySolution ? " · ✍️ yours added" : ""}`}</button>
+                     ${
+                       row.showSol
+                         ? `<div class="cand-sol">${methodsBlock(it, { check: true }) || `<p class="muted small">No solution yet.</p>`}${solverBlock(it)}
+                             <div class="mysol-box"><span class="small"><b>✍️ My solution</b> (type or paste — optional)</span>
+                               <textarea rows="4" data-${P}mysol="${i}" placeholder="Your own working, as you solved it" aria-label="My solution">${esc(it.mySolution || "")}</textarea></div></div>`
+                         : ""
+                     }`
+                  : ""
+              }
               ${
                 it.variantOf
                   ? ""
@@ -764,7 +807,8 @@ export function createQuantUI(ctx, part) {
             ? `<div class="explain g-explain ${answered ? (q.lastCorrect ? "ok" : "bad") : ""}">
                  <div class="explain-text">
                    ${it.kind === "question" && answered && !cur.selfGraded ? `<p class="small"><b>${q.lastCorrect ? "✓ Right" : `✗ The answer is ${esc(it.a)}`}</b></p>` : ""}
-                   ${it.kind === "question" && it.solution ? `<p class="small"><b>${it.shortcut ? "Method 1 · Standard" : "Solution"}</b><br />${lines(it.solution)}</p>` : ""}
+                   ${it.kind === "question" && it.mySolution ? `<p class="small"><b>✍️ My solution</b><br />${lines(it.mySolution)}</p>` : ""}
+                   ${it.kind === "question" && it.solution ? `<p class="small"><b>${it.solutionFrom === "notes" ? "Method 1 · From your notes" : it.shortcut ? "Method 1 · Standard" : "Solution"}</b><br />${lines(it.solution)}</p>` : ""}
                    ${it.kind === "question" && it.shortcut ? `<p class="small fast-line"><b>⚡ Method 2 · Shortest${it.fastSecs ? ` (≈ ${it.fastSecs} s)` : ""}</b><br />${lines(it.shortcut)}</p>` : ""}
                    ${it.formula && it.kind === "question" ? `<p class="small">📐 ${lines(it.formula)}</p>` : ""}
                    ${it.trick ? `<p class="small">💡 <b>Trick:</b> ${lines(it.trick)}</p>` : ""}
@@ -981,6 +1025,7 @@ export function createQuantUI(ctx, part) {
                       <button class="btn small" type="button" data-action="${P}-copy-similar" data-id="${esc(it.id)}">📋 Prompt for 2 more</button>`
                    : ""
                }
+               ${it.kind === "question" ? `<button class="btn small" type="button" data-action="${P}-mysol" data-id="${esc(it.id)}">✍️ ${it.mySolution ? "Edit my solution" : "Add my solution"}</button>` : ""}
                ${
                  it.kind === "question" && !it.shortcut
                    ? `${ai ? `<button class="btn small" type="button" data-action="${P}-find-methods" data-id="${esc(it.id)}">⚡ Find the shortest method</button>` : ""}
@@ -1070,6 +1115,7 @@ export function createQuantUI(ctx, part) {
         <label class="field">Wrong options (one per line)<textarea name="options" rows="3">${esc((it?.options ?? []).join("\n"))}</textarea></label>
         <label class="field">Method 1 · solution steps (or a formula's worked example)<textarea name="solution" rows="4">${v("solution")}</textarea></label>
         <label class="field">⚡ Method 2 · shortest method (questions)<textarea name="shortcut" rows="3">${v("shortcut")}</textarea></label>
+        <label class="field">✍️ My solution<textarea name="mySolution" rows="3">${v("mySolution")}</textarea></label>
         <label class="field">Method 2 takes about (seconds)<input name="fastSecs" type="number" min="0" max="900" value="${it?.fastSecs || ""}" /></label>
         <label class="field">Formula<textarea name="formula" rows="2">${v("formula")}</textarea></label>
         <label class="field">Trick / shortcut<textarea name="trick" rows="2">${v("trick")}</textarea></label>
@@ -1093,6 +1139,7 @@ export function createQuantUI(ctx, part) {
       solution: f.get("solution"),
       shortcut: f.get("shortcut"),
       fastSecs: Number(f.get("fastSecs")) || 0,
+      mySolution: f.get("mySolution"),
       formula: f.get("formula"),
       trick: f.get("trick"),
       subject,
@@ -1227,6 +1274,49 @@ export function createQuantUI(ctx, part) {
       } catch (e) {
         toast(e.message, 7000);
       }
+    },
+    [`${P}-cand-sol`]: (el) => {
+      const row = gui.candidates?.items[Number(el.dataset.i)];
+      if (!row) return;
+      row.showSol = !row.showSol;
+      render();
+    },
+    [`${P}-mysol`]: (el) => {
+      const it = qs.byId(el.dataset.id);
+      if (!it) return;
+      openOverlay(`
+        <div class="sheet-bar"><h3>✍️ My solution</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
+        <p class="muted small">${esc(it.q.length > 160 ? `${it.q.slice(0, 158)}…` : it.q)}</p>
+        <textarea id="${P}MySol" rows="9" placeholder="Type or paste your own working, step by step">${esc(it.mySolution || "")}</textarea>
+        <p class="muted small">Each “a = b” in it is re-calculated by the built-in solver, so a slip in the arithmetic is pointed out.</p>
+        <div class="row wrap">
+          <button class="btn primary" type="button" data-action="${P}-mysol-save" data-id="${esc(it.id)}">Save</button>
+          <button class="btn" type="button" data-action="${P}-mysol-paste">📋 Paste</button>
+          ${it.mySolution ? `<button class="btn ghost" type="button" data-action="${P}-mysol-clear" data-id="${esc(it.id)}">Remove</button>` : ""}
+        </div>`);
+      $(`#${P}MySol`)?.focus();
+    },
+    [`${P}-mysol-paste`]: async () => {
+      const box = $(`#${P}MySol`);
+      try {
+        const t = await navigator.clipboard.readText();
+        if (box && t) box.value = box.value ? `${box.value}\n${t}` : t;
+      } catch {
+        toast("Press and hold in the box → Paste.", 4000);
+        box?.focus();
+      }
+    },
+    [`${P}-mysol-save`]: (el) => {
+      const v = $(`#${P}MySol`)?.value ?? "";
+      qs.updateItem(el.dataset.id, (i) => ({ ...i, mySolution: v }));
+      toast(v.trim() ? "Your solution is saved ✓" : "Removed");
+      showItem(el.dataset.id);
+      after();
+    },
+    [`${P}-mysol-clear`]: (el) => {
+      qs.updateItem(el.dataset.id, (i) => ({ ...i, mySolution: "" }));
+      showItem(el.dataset.id);
+      after();
     },
     [`${P}-find-methods`]: async (el) => {
       // One question (from its card) or every question still missing Method 2 (data-all).
@@ -1572,6 +1662,12 @@ export function createQuantUI(ctx, part) {
     }
     if (e.target.id === `${P}Topic`) {
       gui.topicDraft = e.target.value;
+      return true;
+    }
+    const mi = e.target.dataset?.[`${P}mysol`];
+    if (mi != null && gui.candidates?.items[Number(mi)]) {
+      const row = gui.candidates.items[Number(mi)];
+      row.item = { ...row.item, mySolution: e.target.value };
       return true;
     }
     return false;

@@ -54,7 +54,9 @@ export function makeQItem(input = {}, now = new Date()) {
     a: kind === "formula" ? "" : a,
     options: kind === "formula" ? [] : options, // WRONG options only
     solution: text(input.solution ?? input.example, 1500), // Method 1: steps (questions) or a worked example (formulas)
+    solutionFrom: input.solutionFrom === "notes" ? "notes" : "", // "notes": Method 1 is the working from the learner's own PDF / notes
     shortcut: kind === "formula" ? "" : text(input.shortcut ?? input.method2, 1200), // Method 2: the shortest way to the answer
+    mySolution: text(input.mySolution, 2000), // the learner's own solution, typed or pasted
     fastSecs: kind === "formula" ? 0 : clampInt(input.fastSecs ?? input.seconds, 0, 900, 0), // about how long Method 2 takes
     formula: text(input.formula ?? (kind === "formula" ? input.a : ""), 800),
     trick: text(input.trick, 600),
@@ -68,6 +70,7 @@ export function makeQItem(input = {}, now = new Date()) {
     source: line(input.source, 160),
     aiAnswered: Boolean(input.aiAnswered),
     aiMade: Boolean(input.aiMade), // a practice question written by AI
+    solver: Boolean(input.solver), // answered by the built-in solver (no AI)
     starred: Boolean(input.starred),
     addedAt: input.addedAt || stamp,
     updatedAt: input.updatedAt || stamp,
@@ -129,12 +132,12 @@ export function matchPattern(name, existing) {
 
 export function qItemsToCSV(items) {
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["Kind", "Subject", "Topic", "Type", "Question / Formula name", "Answer", "Wrong options", "Method 1 / Example", "Method 2 (shortest)", "Seconds", "Formula", "Trick", "Practice question of"];
+  const head = ["Kind", "Subject", "Topic", "Type", "Question / Formula name", "Answer", "Wrong options", "Method 1 / Example", "Method 2 (shortest)", "Seconds", "My solution", "Formula", "Trick", "Practice question of"];
   const byId = new Map(items.map((i) => [i.id, i]));
   return [
     head.join(","),
     ...items.map((i) =>
-      [KINDS[i.kind], i.subject, i.topic, i.pattern, i.q, i.a, i.options.join("; "), i.solution, i.shortcut, i.fastSecs || "", i.formula, i.trick, byId.get(i.variantOf)?.q || ""].map(cell).join(","),
+      [KINDS[i.kind], i.subject, i.topic, i.pattern, i.q, i.a, i.options.join("; "), i.solution, i.shortcut, i.fastSecs || "", i.mySolution, i.formula, i.trick, byId.get(i.variantOf)?.q || ""].map(cell).join(","),
     ),
   ].join("\n");
 }

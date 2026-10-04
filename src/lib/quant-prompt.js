@@ -239,7 +239,9 @@ const TYPE_LINE = F("type|question type|pattern");
 const A_LINE = F("a|ans|answer|correct answer|right answer");
 const O_LINE = F("o|opts?|options?|wrong options?|wrong answers?|distractors?");
 const S_LINE = F("s|sol|solution|steps?|explanation|working|method|m1|method\\s*1|standard method|long method");
-// Method 2 — checked before S_LINE, which would otherwise read "Method 2:" as a solution line.
+// The learner's own solution ("My solution: …"), and Method 2 — both checked before S_LINE, which would otherwise read
+// "Method 2:" as a solution line.
+const MY_LINE = F("my|my solution|my method|my working|my answer working");
 const M2_LINE = F("m2|method\\s*2|shortest(?:\\s+method)?|fastest(?:\\s+method)?|quick(?:est)?\\s+method|short\\s+method|shortcut\\s+method");
 const SECS = /^\(?\s*[≈~]?\s*(\d{1,3})\s*(?:s|sec|secs|seconds)\b\.?\s*\)?\s*[:\-–]?\s*/i;
 const FM_LINE = F("f|formula used|formula|rule used|rule");
@@ -276,7 +278,7 @@ export function readQuant(textIn) {
       if (cur.kind === "question" && letter && cur.letters[letter[1].toLowerCase()]) cur.a = cur.letters[letter[1].toLowerCase()];
       const options = [...new Set([...cur.options, ...Object.values(cur.letters)].map((o) => o.trim()).filter((o) => o && norm(o) !== norm(cur.a)))];
       const { letters, ...item } = cur;
-      out.push({ ...item, options, solution: item.solution.trim(), shortcut: item.shortcut.trim(), formula: item.formula.trim(), trick: item.trick.trim() });
+      out.push({ ...item, options, solution: item.solution.trim(), shortcut: item.shortcut.trim(), mySolution: item.mySolution.trim(), formula: item.formula.trim(), trick: item.trick.trim() });
     }
     cur = null;
     field = null;
@@ -284,7 +286,7 @@ export function readQuant(textIn) {
   const start = (kind, q, extra = {}) => {
     finish();
     rest.push("");
-    cur = { id: uid(n++), kind, q: q.trim(), a: "", options: [], letters: {}, solution: "", shortcut: "", fastSecs: 0, formula: "", trick: "", figure: pendingFig, difficulty: 0, pattern, ...place, ...extra };
+    cur = { id: uid(n++), kind, q: q.trim(), a: "", options: [], letters: {}, solution: "", shortcut: "", mySolution: "", fastSecs: 0, formula: "", trick: "", figure: pendingFig, difficulty: 0, pattern, ...place, ...extra };
     pendingFig = "";
     field = "q";
   };
@@ -373,6 +375,7 @@ export function readQuant(textIn) {
       cur.options.push(...(parts.length > 1 ? parts : m[1].split(/\s*,\s+/)));
       field = null;
     } else if ((m = A_LINE.exec(l)) && cur.kind === "question") (cur.a = m[1].trim()), (field = null);
+    else if ((m = MY_LINE.exec(l)) && cur.kind === "question") add("mySolution", m[1]);
     else if ((m = M2_LINE.exec(l)) && cur.kind === "question") {
       let v = m[1];
       const secs = SECS.exec(v);
@@ -385,7 +388,7 @@ export function readQuant(textIn) {
     else if ((m = E_LINE.exec(l))) add("solution", m[1]);
     else if ((m = D_LINE.exec(l))) cur.difficulty = Number(m[1]) || 0;
     else if (cur.kind === "question" && !cur.a && (m = LETTER_OPTION.exec(l))) cur.letters[m[1].toLowerCase()] = m[2].trim();
-    else if (field === "q" || field === "solution" || field === "shortcut" || field === "formula" || field === "trick") cur[field] = `${cur[field]}\n${l}`.trim();
+    else if (field === "q" || field === "solution" || field === "shortcut" || field === "mySolution" || field === "formula" || field === "trick") cur[field] = `${cur[field]}\n${l}`.trim();
     else {
       finish();
       rest.push("", l);
