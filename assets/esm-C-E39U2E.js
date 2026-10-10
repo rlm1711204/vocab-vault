@@ -1,0 +1,1 @@
+import{a as e}from"./index-DYduMmjq.js";var t=e(`FileOpener`);export{t as FileOpener};

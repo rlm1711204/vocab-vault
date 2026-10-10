@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="A revision app for all Govt competitive exams: vocabulary, grammar, GK, maths, reasoning and steno." />
+    <meta name="theme-color" content="#0f766e" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg?v=193gaff" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon-192.png?v=193gaff" />
+    <title>SSC Vault</title>
+    <script type="module" crossorigin src="./assets/index-DYduMmjq.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BSWZxknq.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <button class="brand" type="button" data-nav="home" aria-label="Start screen">
+        <img src="./icon.svg?v=193gaff" alt="" width="28" height="28" />
+        <span class="brand-name">SSC Vault</span>
+        <small class="brand-sub">Your personal SSC question repository</small>
+      </button>
+      <div class="section-switch" role="group" aria-label="Part of the app">
+        <button type="button" data-nav="today" data-sec="vocab">📘<span class="lbl"> Vocab</span></button>
+        <button type="button" data-nav="g-today" data-sec="grammar">📗<span class="lbl"> Grammar</span></button>
+        <button type="button" data-nav="k-today" data-sec="gk">🌍<span class="lbl"> GK</span></button>
+        <button type="button" data-nav="m-today" data-sec="maths">🔢<span class="lbl"> Maths</span></button>
+        <button type="button" data-nav="r-today" data-sec="reasoning">🧩<span class="lbl"> Reasoning</span></button>
+        <button type="button" data-nav="s-test" data-sec="steno">✍️<span class="lbl"> Steno</span></button>
+      </div>
+      <span class="ai-chip" id="aiChip" role="status" aria-live="polite" hidden></span>
+      <button class="sync-chip" id="syncChip" data-action="sync" type="button" aria-live="polite">Local only</button>
+    </header>
+
+    <main id="view" tabindex="-1"></main>
+
+    <nav class="tabbar" aria-label="Main"></nav>
+
+    <div id="overlay"></div>
+    <div id="info"></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+
+  </body>
+</html>
