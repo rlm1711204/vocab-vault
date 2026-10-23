@@ -1,0 +1,1 @@
+import{o as e}from"./index-B92ogH60.js";var t=e(`FileOpener`);export{t as FileOpener};
