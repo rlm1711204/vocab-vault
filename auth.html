@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Signing in — SSC Vault</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <style>
+      :root { --bg: #f8e8eb; --ink: #2a1c21; --ink2: #6c5560; --accent: #0f766e; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #0f1615; --ink: #e8f0ee; --ink2: #9fb0ac; --accent: #5eead4; } }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; text-align: center; }
+      main { padding: 24px 16px; max-width: 360px; }
+      img { width: 72px; height: 72px; border-radius: 18px; }
+      h1 { font-size: 1.3rem; margin: 12px 0 4px; }
+      p { color: var(--ink2); margin: 0 0 18px; }
+      a.btn { display: inline-block; background: var(--accent); color: #fff; padding: 12px 22px; border-radius: 12px; text-decoration: none; font-weight: 700; }
+      @media (prefers-color-scheme: dark) { a.btn { color: #062b27; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="./icon-192.png" alt="" />
+      <h1 id="title">Signed in ✓</h1>
+      <p id="msg">Going back to SSC Vault…</p>
+      <a class="btn" id="back" href="#">Back to SSC Vault</a>
+    </main>
+    <script>
+      // Google sign-in for the SSC Vault Android app ends here (the website app signs in with Google's own window
+      // and never comes to this page). The answer is passed to the app through its sscvault://auth link; the
+      // token is taken out of this page's address first, so it stays in no browser history.
+      const got = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
+      history.replaceState(null, "", location.pathname);
+      const q = new URLSearchParams();
+      for (const k of ["access_token", "expires_in", "state", "error", "error_description"]) if (got.get(k)) q.set(k, got.get(k));
+      const link = `intent://auth?${q}#Intent;scheme=sscvault;package=io.github.rlm1711204.sscvault;end`;
+      const back = document.getElementById("back");
+      back.href = link;
+      if (!got.get("access_token")) {
+        document.getElementById("title").textContent = got.get("error") ? "Sign-in didn't finish" : "SSC Vault";
+        document.getElementById("msg").textContent = got.get("error") ? "Go back to the app and try again." : "Open SSC Vault on your phone.";
+      }
+      if (got.get("state")) location.href = link;
+    </script>
+  </body>
+</html>
